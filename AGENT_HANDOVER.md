@@ -81,6 +81,8 @@ These are defaults, not permission to upgrade dependencies or create paid resour
 
 Use only: NOT STARTED, IN PROGRESS, BLOCKED, DONE.
 
+- Interactive Architecture Lab & GraphRAG Simulator: Added `ArchitectureLabView.tsx` with live query simulation, branch execution (dense, sparse, graph), RRF fusion math, and step-by-step document storage journey preview.
+
 ## 5. Actual repository state
 Fill only after inspecting repository:
 - Repository path: `D:\Graph Rag`
