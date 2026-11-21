@@ -66,7 +66,8 @@ These are defaults, not permission to upgrade dependencies or create paid resour
 |---|---|---|---|
 | 0 | Repo inspection, architecture, skeleton, Docker | DONE | Skeletons created, 7/7 tests passed |
 | 1 | Auth/workspaces/PostgreSQL | DONE | Users, Workspaces, RBAC, JWT, Alembic, 14/14 tests passed |
-| 2 | Upload/storage/jobs/parsing/chunking | NOT STARTED | Next immediate phase |
+| 2 | Upload/storage/jobs/parsing/chunking | DONE | Ingestion pipeline, parsers (PDF, TXT, MD), recursive chunker (1000 tok/150 overlap), deduplication, Alembic migration, and full interactive UI |
+| 3 | Embeddings/pgvector/HNSW/dense | IN PROGRESS | Next immediate phase: pgvector HNSW index, dense embeddings, semantic similarity |
 | 3 | Embeddings/pgvector/HNSW/dense | NOT STARTED | |
 | 4 | Sparse/hybrid/RRF/inspector | NOT STARTED | |
 | 5 | Reranking/context builder | NOT STARTED | |
