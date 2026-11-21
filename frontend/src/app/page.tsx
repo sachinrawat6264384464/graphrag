@@ -1,258 +1,424 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchReadiness, ReadinessResponse } from "@/lib/api";
 import {
-  Server,
-  Database,
+  fetchReadiness,
+  fetchDocumentsApi,
+  fetchProfileApi,
+  loginApi,
+  registerApi,
+  ReadinessResponse,
+  DocumentItem,
+  User,
+  Workspace,
+} from "@/lib/api";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { OverviewView } from "@/components/views/OverviewView";
+import { DocumentsView } from "@/components/views/DocumentsView";
+import { ChatView } from "@/components/views/ChatView";
+import { GraphView } from "@/components/views/GraphView";
+import { InspectorView } from "@/components/views/InspectorView";
+import {
+  Activity,
+  FileText,
+  MessageSquare,
   Share2,
   Layers,
   ShieldCheck,
-  Activity,
   RefreshCw,
+  LogIn,
+  LogOut,
+  User as UserIcon,
+  ChevronDown,
+  Sparkles,
+  Menu,
+  X,
+  Upload,
 } from "lucide-react";
 
+type NavigationTab = "overview" | "documents" | "chat" | "graph" | "inspector";
+
 export default function HomePage() {
+  const [activeTab, setActiveTab] = useState<NavigationTab>("documents");
   const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loadingHealth, setLoadingHealth] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Authentication & Workspace State
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  // Documents State
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState<boolean>(false);
+
+  // Mobile sidebar state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+
+  // Health check callback
   const checkStatus = useCallback(async () => {
-    setLoading(true);
+    setLoadingHealth(true);
     try {
       const data = await fetchReadiness();
       setReadiness(data);
       setLastUpdated(new Date());
     } finally {
-      setLoading(false);
+      setLoadingHealth(false);
     }
   }, []);
 
+  // Fetch documents callback
+  const loadDocuments = useCallback(async (wsId: string, authToken: string) => {
+    setLoadingDocs(true);
+    try {
+      const docs = await fetchDocumentsApi(wsId, authToken);
+      setDocuments(docs);
+    } catch {
+      // In case of error, keep previous
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, []);
+
+  // Check saved token or initialize demo session
   useEffect(() => {
     checkStatus();
-    // Poll every 6 seconds to keep live metrics updated
-    const interval = setInterval(checkStatus, 6000);
-    return () => clearInterval(interval);
-  }, [checkStatus]);
+    const interval = setInterval(checkStatus, 8000);
 
-  const services = [
+    const savedToken = localStorage.getItem("nexus_token");
+    if (savedToken) {
+      setToken(savedToken);
+      fetchProfileApi(savedToken)
+        .then((profile) => {
+          setUser(profile.user);
+          setWorkspaces(profile.workspaces);
+          if (profile.workspaces.length > 0) {
+            setActiveWorkspace(profile.workspaces[0]);
+            loadDocuments(profile.workspaces[0].id, savedToken);
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem("nexus_token");
+          setToken(null);
+        });
+    }
+
+    return () => clearInterval(interval);
+  }, [checkStatus, loadDocuments]);
+
+  // Handle successful login/registration
+  const handleAuthSuccess = async (data: { token: string; email: string }) => {
+    localStorage.setItem("nexus_token", data.token);
+    setToken(data.token);
+    try {
+      const profile = await fetchProfileApi(data.token);
+      setUser(profile.user);
+      setWorkspaces(profile.workspaces);
+      if (profile.workspaces.length > 0) {
+        setActiveWorkspace(profile.workspaces[0]);
+        loadDocuments(profile.workspaces[0].id, data.token);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Quick 1-click guest login for frictionless developer experience
+  const handleQuickDemoLogin = async () => {
+    try {
+      const demoEmail = "sachin_demo@example.com";
+      const demoPassword = "Password123!";
+      try {
+        const res = await loginApi(demoEmail, demoPassword);
+        handleAuthSuccess({ token: res.access_token, email: demoEmail });
+      } catch {
+        const reg = await registerApi(demoEmail, demoPassword, "Sachin Rawat");
+        handleAuthSuccess({ token: reg.token.access_token, email: demoEmail });
+      }
+    } catch {
+      setIsAuthModalOpen(true);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("nexus_token");
+    setToken(null);
+    setUser(null);
+    setWorkspaces([]);
+    setActiveWorkspace(null);
+    setDocuments([]);
+  };
+
+  const totalChunksCount = documents.reduce((acc, d) => acc + (d.total_chunks || 0), 0);
+
+  const navItems = [
     {
-      name: "FastAPI Backend",
-      icon: Server,
-      status: readiness ? "online" : loading ? "checking..." : "offline",
-      latency: null,
-      description: "Asynchronous REST API, Pydantic v2 schemas, and retrieval orchestration.",
-      role: "Application Core",
+      id: "overview" as NavigationTab,
+      label: "System Health & Roadmap",
+      icon: Activity,
+      badge: readiness?.status ? readiness.status.toUpperCase() : null,
+      badgeColor:
+        readiness?.status === "healthy"
+          ? "text-green-500 bg-green-500/10"
+          : "text-yellow-500 bg-yellow-500/10",
     },
     {
-      name: "PostgreSQL + pgvector",
-      icon: Database,
-      status: readiness?.services.postgres.status || (loading ? "checking..." : "offline"),
-      latency: readiness?.services.postgres.latency_ms,
-      description: "ACID metadata, multi-tenant records, and HNSW dense vector index.",
-      role: "Relational & Dense Storage",
+      id: "documents" as NavigationTab,
+      label: "Document Ingestion",
+      icon: FileText,
+      badge: `${documents.length}`,
+      badgeColor: "text-accent bg-accent/10",
     },
     {
-      name: "Neo4j Graph Database",
+      id: "chat" as NavigationTab,
+      label: "AI Search & Chat (RAG)",
+      icon: MessageSquare,
+      badge: "Active",
+      badgeColor: "text-accent bg-accent/10",
+    },
+    {
+      id: "graph" as NavigationTab,
+      label: "Knowledge Graph",
       icon: Share2,
-      status: readiness?.services.neo4j.status || (loading ? "checking..." : "offline"),
-      latency: readiness?.services.neo4j.latency_ms,
-      description: "Entity-relation knowledge graph and bounded multi-hop GraphRAG traversal.",
-      role: "Knowledge Graph Engine",
+      badge: "Phase 6",
+      badgeColor: "text-muted-foreground bg-surface-muted",
     },
     {
-      name: "Redis Cache & Broker",
+      id: "inspector" as NavigationTab,
+      label: "Retrieval Inspector",
       icon: Layers,
-      status: readiness?.services.redis.status || (loading ? "checking..." : "offline"),
-      latency: readiness?.services.redis.latency_ms,
-      description: "In-memory caching, rate limiting, and asynchronous Celery task broker.",
-      role: "Queue & Fast Cache",
+      badge: "7 Stages",
+      badgeColor: "text-muted-foreground bg-surface-muted",
     },
   ];
 
   return (
-    <div className="flex-1 flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="border-b border-border bg-surface px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded bg-accent flex items-center justify-center text-white font-bold text-sm">
-            NX
-          </div>
-          <div>
-            <h1 className="font-semibold text-base leading-tight">NexusAI</h1>
-            <p className="text-xs text-muted-foreground">Enterprise Hybrid RAG + GraphRAG Platform</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={checkStatus}
-            disabled={loading}
-            title="Refresh System Status"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-border bg-surface-muted hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
-          >
-            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin text-accent" : ""}`} />
-            {loading ? "Checking..." : "Refresh"}
-          </button>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-surface-muted">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                readiness?.status === "healthy"
-                  ? "bg-status-success"
-                  : readiness?.status === "degraded"
-                  ? "bg-status-warning"
-                  : "bg-status-error"
-              }`}
-            />
-            Status: {readiness ? readiness.status.toUpperCase() : loading ? "CONNECTING..." : "STANDALONE"}
-          </span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">Phase 1 Architecture</span>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-8">
-        {/* Welcome Banner */}
-        <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="space-y-2 max-w-2xl">
-              <h2 className="text-xl font-bold tracking-tight">Enterprise Knowledge Intelligence</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                NexusAI unifies exact keyword search, dense semantic retrieval (pgvector), and property
-                graph traversal (Neo4j) to deliver verifiable, evidence-grounded answers with precise citations.
-              </p>
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      {/* Left Sidebar Navigation */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-border bg-surface flex flex-col transition-transform lg:static lg:translate-x-0 ${
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Brand Header */}
+        <div className="p-5 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-accent text-white flex items-center justify-center font-bold text-base shadow-sm">
+              NX
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground border border-border rounded px-3 py-2 bg-surface-muted">
-              <ShieldCheck className="h-4 w-4 text-accent" />
-              <span>Multi-Tenant Isolated (Phase 1 Ready)</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Phase 1 Implemented Features */}
-        <section className="rounded-lg border border-accent/30 bg-surface p-6 space-y-4">
-          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-accent">
-                Phase 1 Implemented: Multi-Tenant Auth & Workspaces
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Bcrypt password hashing, Signed PyJWT bearer authentication, and isolated workspace boundaries.
-              </p>
-            </div>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800">
-              Active & Verified (14/14 Tests Passing)
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block text-foreground">User Authentication</span>
-              <p className="text-muted-foreground leading-normal">
-                <code>/api/v1/auth/register</code>, <code>/login</code>, and <code>/me</code> with salted bcrypt hashing and JWT.
-              </p>
-            </div>
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block text-foreground">Multi-Tenant Boundaries</span>
-              <p className="text-muted-foreground leading-normal">
-                Auto-provisioned personal workspaces + custom organization tenants with strict isolation.
-              </p>
-            </div>
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block text-foreground">Role-Based Access Control</span>
-              <p className="text-muted-foreground leading-normal">
-                Fine-grained permissions: Platform Admin, Workspace Admin, Editor, and Viewer.
-              </p>
+              <h1 className="font-bold text-sm tracking-tight leading-tight">NexusAI</h1>
+              <p className="text-[11px] text-muted-foreground">Hybrid RAG + GraphRAG</p>
             </div>
           </div>
-        </section>
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden p-1 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-        {/* Infrastructure Topology Grid */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Core Infrastructure Components (Phase 0)
-            </h3>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Activity className="h-3.5 w-3.5 text-accent" />
-              {lastUpdated
-                ? `Last inspected ${lastUpdated.toLocaleTimeString()}`
-                : "Inspecting..."}
-            </span>
+        {/* Workspace Selector Card */}
+        <div className="p-4 border-b border-border bg-surface-muted/30">
+          <div className="p-3 rounded-lg border border-border bg-surface space-y-1.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                Active Tenant
+              </span>
+              <span className="text-[10px] text-green-500 font-semibold flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" /> Isolated
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground truncate max-w-[150px]">
+                {activeWorkspace ? activeWorkspace.name : "Personal Workspace"}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate">
+              ID: {activeWorkspace ? activeWorkspace.id.slice(0, 13) + "..." : "Auto-Provisioned"}
+            </p>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {services.map((svc) => (
-              <div
-                key={svc.name}
-                className="rounded-lg border border-border bg-surface p-5 space-y-3 transition-colors hover:border-accent/40"
+        {/* Navigation Items */}
+        <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-accent text-white shadow-xs"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                }`}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-md bg-surface-muted border border-border text-accent">
-                      <svc.icon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-sm">{svc.name}</h4>
-                      <p className="text-xs text-muted-foreground">{svc.role}</p>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2.5">
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge && (
                   <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize border ${
-                      svc.status === "healthy" || svc.status === "online"
-                        ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-                        : svc.status === "checking..." || svc.status === "connecting"
-                        ? "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800"
-                        : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      isActive ? "bg-white/20 text-white" : item.badgeColor
                     }`}
                   >
-                    {svc.status}
-                    {svc.latency !== undefined && svc.latency !== null ? ` (${svc.latency}ms)` : ""}
+                    {item.badge}
                   </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User Account / Profile Section */}
+        <div className="p-4 border-t border-border bg-surface-muted/30 space-y-2">
+          {user ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="h-8 w-8 rounded-full bg-accent/15 text-accent flex items-center justify-center font-bold text-xs shrink-0">
+                  {user.email[0].toUpperCase()}
                 </div>
-                <p className="text-xs text-muted-foreground leading-normal">{svc.description}</p>
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {user.full_name || user.email.split("@")[0]}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="p-1.5 rounded-md hover:bg-surface-muted text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition-all cursor-pointer shadow-xs"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                <span>Sign In / Register</span>
+              </button>
+              <button
+                onClick={handleQuickDemoLogin}
+                className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium text-muted-foreground hover:text-foreground border border-border bg-surface hover:bg-surface-muted transition-colors cursor-pointer"
+              >
+                <Sparkles className="h-3 w-3 text-accent" />
+                <span>1-Click Test Login (Sachin)</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
 
-        {/* Retrieval Pipeline Modules Preview */}
-        <section className="rounded-lg border border-border bg-surface p-6 space-y-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Planned Pipeline Architecture
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-center text-xs">
-            <div className="p-3 rounded border border-green-500/40 bg-green-500/10 space-y-1">
-              <span className="font-semibold block text-green-600 dark:text-green-400">Phase 1 ✓</span>
-              <span className="text-foreground">Auth & Tenancy</span>
-            </div>
-            <div className="p-3 rounded border border-accent/40 bg-accent/10 space-y-1">
-              <span className="font-semibold block text-accent">Phase 2 ➜</span>
-              <span className="text-foreground">Async Ingestion</span>
-            </div>
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block">Phase 3</span>
-              <span className="text-muted-foreground">Dense Vectors</span>
-            </div>
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block">Phase 4</span>
-              <span className="text-muted-foreground">FTS & RRF Fusion</span>
-            </div>
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block">Phase 6</span>
-              <span className="text-muted-foreground">Neo4j Extraction</span>
-            </div>
-            <div className="p-3 rounded border border-border bg-surface-muted space-y-1">
-              <span className="font-semibold block">Phase 7-10</span>
-              <span className="text-muted-foreground">GraphRAG & Agent</span>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top Header Bar */}
+        <header className="h-16 border-b border-border bg-surface px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div>
+              <h2 className="text-sm font-bold capitalize text-foreground">
+                {activeTab === "overview" && "System Health & Architecture"}
+                {activeTab === "documents" && "Document Ingestion & Chunking (Phase 2)"}
+                {activeTab === "chat" && "AI Search & Evidence Grounded Chat"}
+                {activeTab === "graph" && "Knowledge Graph Explorer (Neo4j)"}
+                {activeTab === "inspector" && "Retrieval Pipeline Inspector"}
+              </h2>
+              <p className="text-[11px] text-muted-foreground hidden sm:block">
+                NexusAI Multi-Tenant Knowledge Intelligence Platform
+              </p>
             </div>
           </div>
-        </section>
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-surface px-6 py-4 text-center text-xs text-muted-foreground">
-        NexusAI Enterprise Platform — Phase 1 Multi-Tenant Auth Verification Complete
-      </footer>
+          <div className="flex items-center gap-3">
+            {/* Quick Upload action in header */}
+            {activeTab !== "documents" && (
+              <button
+                onClick={() => setActiveTab("documents")}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-surface hover:bg-surface-muted transition-colors cursor-pointer"
+              >
+                <Upload className="h-3.5 w-3.5 text-accent" />
+                <span>Upload Document</span>
+              </button>
+            )}
+
+            {/* Health pill */}
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-surface-muted">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  readiness?.status === "healthy"
+                    ? "bg-green-500"
+                    : readiness?.status === "degraded"
+                    ? "bg-yellow-500"
+                    : "bg-red-500"
+                }`}
+              />
+              <span className="font-semibold text-[11px]">
+                {readiness?.status ? readiness.status.toUpperCase() : "CHECKING..."}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* Dynamic Body Content */}
+        <main className="flex-1 overflow-y-auto p-6 max-w-6xl w-full mx-auto">
+          {activeTab === "overview" && (
+            <OverviewView
+              readiness={readiness}
+              loading={loadingHealth}
+              lastUpdated={lastUpdated}
+              onRefresh={checkStatus}
+              onNavigateTab={setActiveTab}
+              documentCount={documents.length}
+              chunkCount={totalChunksCount}
+              userEmail={user?.email || null}
+            />
+          )}
+
+          {activeTab === "documents" && (
+            <DocumentsView
+              documents={documents}
+              workspaceId={activeWorkspace?.id || null}
+              token={token}
+              onRefresh={() => {
+                if (activeWorkspace && token) loadDocuments(activeWorkspace.id, token);
+              }}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+            />
+          )}
+
+          {activeTab === "chat" && <ChatView documentCount={documents.length} />}
+
+          {activeTab === "graph" && <GraphView />}
+
+          {activeTab === "inspector" && <InspectorView />}
+        </main>
+      </div>
+
+      {/* Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }
