@@ -417,7 +417,13 @@ export default function HomePage() {
 
           {activeTab === "chat" && <ChatView documentCount={documents.length} />}
 
-          {activeTab === "graph" && <GraphView />}
+          {activeTab === "graph" && (
+            <GraphView
+              workspaceId={activeWorkspace?.id || null}
+              token={token}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+            />
+          )}
 
           {activeTab === "inspector" && <InspectorView />}
         </main>

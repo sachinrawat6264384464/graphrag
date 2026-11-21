@@ -247,3 +247,131 @@ export async function deleteDocumentApi(
     throw new Error("Failed to delete document");
   }
 }
+
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  degree: number;
+  color?: string;
+  x?: number;
+  y?: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  predicate: string;
+  description: string;
+  confidence: number;
+  chunk_id?: string;
+}
+
+export interface GraphStats {
+  total_nodes: number;
+  total_edges: number;
+  entity_types: Record<string, number>;
+  density: number;
+  connected_components: number;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stats: GraphStats;
+}
+
+export interface TraversalResult {
+  found: boolean;
+  path_nodes: string[];
+  path_edges: Array<{ source: string; target: string; predicate: string; description: string }>;
+  sub_graph: GraphData;
+  reasoning: string;
+  provenance_chunks: Array<{ chunk_id: string; relationship: string; evidence_snippet: string }>;
+}
+
+export interface ExtractionResult {
+  extracted_nodes_count: number;
+  extracted_edges_count: number;
+  triples: Array<{
+    id: string;
+    subject: string;
+    predicate: string;
+    object: string;
+    description: string;
+    confidence: number;
+    source_chunk: string;
+  }>;
+  graph: GraphData;
+}
+
+/**
+ * Fetch full workspace knowledge graph
+ */
+export async function fetchKnowledgeGraphApi(
+  workspaceId: string,
+  token: string
+): Promise<GraphData> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/workspaces/${workspaceId}/graph`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch knowledge graph");
+  }
+  return res.json();
+}
+
+/**
+ * Run real entity and relation extraction on text/chunks
+ */
+export async function extractGraphApi(
+  workspaceId: string,
+  params: { documentId?: string; rawText?: string },
+  token: string
+): Promise<ExtractionResult> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/workspaces/${workspaceId}/graph/extract`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      document_id: params.documentId,
+      raw_text: params.rawText,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to extract knowledge graph");
+  }
+  return res.json();
+}
+
+/**
+ * Execute real multi-hop pathfinding traversal
+ */
+export async function traverseGraphApi(
+  workspaceId: string,
+  params: { sourceEntity?: string; targetEntity?: string; query?: string; maxDepth?: number },
+  token: string
+): Promise<TraversalResult> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/workspaces/${workspaceId}/graph/traverse`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      source_entity: params.sourceEntity,
+      target_entity: params.targetEntity,
+      query: params.query,
+      max_depth: params.maxDepth || 2,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to traverse knowledge graph");
+  }
+  return res.json();
+}
