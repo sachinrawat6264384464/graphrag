@@ -52,7 +52,7 @@ export async function fetchHealth(): Promise<HealthResponse> {
 export async function fetchReadiness(): Promise<ReadinessResponse | null> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const res = await fetch(`${API_BASE_URL}/api/v1/health/ready`, {
       cache: "no-store",

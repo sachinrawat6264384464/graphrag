@@ -1,29 +1,53 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
 import { fetchReadiness, ReadinessResponse } from "@/lib/api";
-import { Server, Database, Share2, Layers, Cpu, ShieldCheck, Activity } from "lucide-react";
+import {
+  Server,
+  Database,
+  Share2,
+  Layers,
+  ShieldCheck,
+  Activity,
+  RefreshCw,
+} from "lucide-react";
 
-async function getSystemStatus(): Promise<ReadinessResponse | null> {
-  try {
-    return await fetchReadiness();
-  } catch {
-    return null;
-  }
-}
+export default function HomePage() {
+  const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-export default async function HomePage() {
-  const readiness = await getSystemStatus();
+  const checkStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchReadiness();
+      setReadiness(data);
+      setLastUpdated(new Date());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkStatus();
+    // Poll every 6 seconds to keep live metrics updated
+    const interval = setInterval(checkStatus, 6000);
+    return () => clearInterval(interval);
+  }, [checkStatus]);
 
   const services = [
     {
       name: "FastAPI Backend",
       icon: Server,
-      status: readiness ? "online" : "connecting",
+      status: readiness ? "online" : loading ? "checking..." : "offline",
+      latency: null,
       description: "Asynchronous REST API, Pydantic v2 schemas, and retrieval orchestration.",
       role: "Application Core",
     },
     {
       name: "PostgreSQL + pgvector",
       icon: Database,
-      status: readiness?.services.postgres.status || "offline",
+      status: readiness?.services.postgres.status || (loading ? "checking..." : "offline"),
       latency: readiness?.services.postgres.latency_ms,
       description: "ACID metadata, multi-tenant records, and HNSW dense vector index.",
       role: "Relational & Dense Storage",
@@ -31,7 +55,7 @@ export default async function HomePage() {
     {
       name: "Neo4j Graph Database",
       icon: Share2,
-      status: readiness?.services.neo4j.status || "offline",
+      status: readiness?.services.neo4j.status || (loading ? "checking..." : "offline"),
       latency: readiness?.services.neo4j.latency_ms,
       description: "Entity-relation knowledge graph and bounded multi-hop GraphRAG traversal.",
       role: "Knowledge Graph Engine",
@@ -39,7 +63,7 @@ export default async function HomePage() {
     {
       name: "Redis Cache & Broker",
       icon: Layers,
-      status: readiness?.services.redis.status || "offline",
+      status: readiness?.services.redis.status || (loading ? "checking..." : "offline"),
       latency: readiness?.services.redis.latency_ms,
       description: "In-memory caching, rate limiting, and asynchronous Celery task broker.",
       role: "Queue & Fast Cache",
@@ -60,6 +84,15 @@ export default async function HomePage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={checkStatus}
+            disabled={loading}
+            title="Refresh System Status"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border border-border bg-surface-muted hover:bg-surface transition-colors cursor-pointer disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin text-accent" : ""}`} />
+            {loading ? "Checking..." : "Refresh"}
+          </button>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-surface-muted">
             <span
               className={`h-2 w-2 rounded-full ${
@@ -70,9 +103,9 @@ export default async function HomePage() {
                   : "bg-status-error"
               }`}
             />
-            Status: {readiness ? readiness.status.toUpperCase() : "STANDALONE / SKELETON"}
+            Status: {readiness ? readiness.status.toUpperCase() : loading ? "CONNECTING..." : "STANDALONE"}
           </span>
-          <span className="text-xs text-muted-foreground">Phase 0 Architecture</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">Phase 0 Architecture</span>
         </div>
       </header>
 
@@ -102,7 +135,10 @@ export default async function HomePage() {
               Core Infrastructure Components (Phase 0)
             </h3>
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Activity className="h-3.5 w-3.5 text-accent" /> Live Readiness Inspection
+              <Activity className="h-3.5 w-3.5 text-accent" />
+              {lastUpdated
+                ? `Last inspected ${lastUpdated.toLocaleTimeString()}`
+                : "Inspecting..."}
             </span>
           </div>
 
@@ -126,7 +162,7 @@ export default async function HomePage() {
                     className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize border ${
                       svc.status === "healthy" || svc.status === "online"
                         ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800"
-                        : svc.status === "connecting"
+                        : svc.status === "checking..." || svc.status === "connecting"
                         ? "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800"
                         : "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800"
                     }`}
@@ -182,4 +218,3 @@ export default async function HomePage() {
     </div>
   );
 }
-
