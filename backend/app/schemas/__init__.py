@@ -1,5 +1,10 @@
 """Consolidated Pydantic Schemas."""
 
+from backend.app.schemas.document import (
+    DocumentChunkResponse,
+    DocumentDetailResponse,
+    DocumentResponse,
+)
 from backend.app.schemas.health import (
     HealthResponse,
     ReadinessResponse,
