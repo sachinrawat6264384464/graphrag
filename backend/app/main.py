@@ -10,6 +10,7 @@ from backend.app.api.router import api_router
 from backend.app.db.neo4j import close_neo4j_driver
 from backend.app.db.redis import close_redis_client
 from backend.app.db.session import engine
+from backend.app.models import Base
 
 
 @asynccontextmanager
@@ -17,6 +18,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and graceful shutdown."""
     setup_logging()
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION} [{settings.ENVIRONMENT}]")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database schemas verified/created successfully.")
+    except Exception as exc:
+        logger.warning(f"Database schema auto-creation skipped or deferred: {exc}")
     yield
     # Graceful shutdown of persistent connections
     logger.info("Shutting down NexusAI services and closing connection pools...")

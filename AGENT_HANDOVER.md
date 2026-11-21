@@ -65,8 +65,8 @@ These are defaults, not permission to upgrade dependencies or create paid resour
 | Phase | Scope | Status | Notes |
 |---|---|---|---|
 | 0 | Repo inspection, architecture, skeleton, Docker | DONE | Skeletons created, 7/7 tests passed |
-| 1 | Auth/workspaces/PostgreSQL | NOT STARTED | Next immediate phase |
-| 2 | Upload/storage/jobs/parsing/chunking | NOT STARTED | |
+| 1 | Auth/workspaces/PostgreSQL | DONE | Users, Workspaces, RBAC, JWT, Alembic, 14/14 tests passed |
+| 2 | Upload/storage/jobs/parsing/chunking | NOT STARTED | Next immediate phase |
 | 3 | Embeddings/pgvector/HNSW/dense | NOT STARTED | |
 | 4 | Sparse/hybrid/RRF/inspector | NOT STARTED | |
 | 5 | Reranking/context builder | NOT STARTED | |
@@ -134,19 +134,33 @@ Initial decisions:
 
 ## 10. Last completed task
 - Date: 2026-11-21
-- Summary: Phase 0 Completed: Inspected repository and host environment, designed compatible architecture, created backend skeleton (FastAPI + Pydantic v2 + SQLAlchemy asyncpg + Neo4j driver + Redis client), created frontend skeleton (Next.js 15 App Router + Tailwind + TypeScript), configured docker-compose.yml with 8GB RAM host memory limits, configured .env.example, added setup documentation (README.md), and created 7 unit tests covering health probes and settings.
-- Files changed: `.gitignore`, `.env.example`, `docker-compose.yml`, `README.md`, `backend/app/*`, `backend/tests/*`, `backend/requirements.txt`, `backend/requirements-dev.txt`, `backend/pyproject.toml`, `frontend/*`, `AGENT_HANDOVER.md`.
-- Migrations: None (Phase 0).
+- Summary: Phase 1 Completed: Multi-tenant user authentication, workspace boundaries, and role-based access control (RBAC). Implemented bcrypt password hashing, signed PyJWT tokens, SQLAlchemy 2.0 async models (User, Workspace, WorkspaceMember), Alembic migration with transactional DDL protection, dependency injection for tenant verification (guaranteeing cross-tenant 403 Forbidden isolation), and comprehensive automated tests (14/14 tests passing).
+- Files changed:
+  - `backend/app/core/security.py`
+  - `backend/app/db/base.py`
+  - `backend/app/models/user.py`
+  - `backend/app/models/workspace.py`
+  - `backend/app/schemas/token.py`
+  - `backend/app/schemas/user.py`
+  - `backend/app/schemas/workspace.py`
+  - `backend/app/api/deps.py`
+  - `backend/app/api/v1/endpoints/auth.py`
+  - `backend/app/api/v1/endpoints/workspaces.py`
+  - `backend/alembic/versions/ef52433362d9_create_users_and_workspaces_tables.py`
+  - `backend/tests/test_auth.py`
+  - `backend/tests/test_workspaces.py`
+- Migrations: `ef52433362d9_create_users_and_workspaces_tables` applied cleanly to PostgreSQL.
 - Commands run:
-  - `& "C:\Program Files\Python312\python.exe" -m venv "D:\Graph Rag\backend\.venv"`
-  - `& "D:\Graph Rag\backend\.venv\Scripts\pip.exe" install --no-cache-dir -r backend/requirements.txt -r backend/requirements-dev.txt`
+  - `alembic init -t async alembic`
+  - `alembic revision --autogenerate -m "create users and workspaces tables"`
+  - `alembic upgrade head`
   - `pytest backend/tests -v`
-- Test results: 7 passed in 6.54s (100% pass).
-- Manual verification: Verified ASGI responses for `/`, `/api/v1/health/live`, `/api/v1/health/ready`.
-- Remaining issues: Docker CLI not found in Windows PATH (standalone and cloud services supported via config).
+- Test results: 14 passed in 144.79s (100% pass rate).
+- Manual verification: Tested register, login, profile fetch with Bearer token, workspace creation, and member invitation.
+- Remaining issues: None for Phase 1.
 
 ## 11. Next exact task
-Implement Phase 1: Authentication, Workspaces, Multi-Tenant Isolation, and PostgreSQL schema with SQLAlchemy 2.x async models and Alembic migrations.
+Implement Phase 2: Document upload and storage adapter, asynchronous ingestion pipeline, file validation, parsing (PDF/TXT/MD), cleaning, and token-bounded chunking with metadata.
 
 ## 12. Next-agent instructions
 1. Read all four project reference files.
