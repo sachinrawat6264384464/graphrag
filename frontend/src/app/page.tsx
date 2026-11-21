@@ -18,6 +18,7 @@ import { DocumentsView } from "@/components/views/DocumentsView";
 import { ChatView } from "@/components/views/ChatView";
 import { GraphView } from "@/components/views/GraphView";
 import { InspectorView } from "@/components/views/InspectorView";
+import { ArchitectureLabView } from "@/components/views/ArchitectureLabView";
 import {
   Activity,
   FileText,
@@ -28,18 +29,17 @@ import {
   RefreshCw,
   LogIn,
   LogOut,
-  User as UserIcon,
-  ChevronDown,
   Sparkles,
   Menu,
   X,
   Upload,
+  Zap,
 } from "lucide-react";
 
-type NavigationTab = "overview" | "documents" | "chat" | "graph" | "inspector";
+type NavigationTab = "lab" | "documents" | "chat" | "graph" | "inspector" | "overview";
 
 export default function HomePage() {
-  const [activeTab, setActiveTab] = useState<NavigationTab>("documents");
+  const [activeTab, setActiveTab] = useState<NavigationTab>("lab");
   const [readiness, setReadiness] = useState<ReadinessResponse | null>(null);
   const [loadingHealth, setLoadingHealth] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -83,7 +83,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // Check saved token or initialize demo session
+  // Check saved token or initialize session
   useEffect(() => {
     checkStatus();
     const interval = setInterval(checkStatus, 8000);
@@ -156,14 +156,11 @@ export default function HomePage() {
 
   const navItems = [
     {
-      id: "overview" as NavigationTab,
-      label: "System Health & Roadmap",
-      icon: Activity,
-      badge: readiness?.status ? readiness.status.toUpperCase() : null,
-      badgeColor:
-        readiness?.status === "healthy"
-          ? "text-green-500 bg-green-500/10"
-          : "text-yellow-500 bg-yellow-500/10",
+      id: "lab" as NavigationTab,
+      label: "Architecture Lab (How It Works)",
+      icon: Zap,
+      badge: "Interactive",
+      badgeColor: "text-amber-500 bg-amber-500/10 font-bold",
     },
     {
       id: "documents" as NavigationTab,
@@ -181,10 +178,10 @@ export default function HomePage() {
     },
     {
       id: "graph" as NavigationTab,
-      label: "Knowledge Graph",
+      label: "Knowledge Graph (Neo4j)",
       icon: Share2,
-      badge: "Phase 6",
-      badgeColor: "text-muted-foreground bg-surface-muted",
+      badge: "Triples",
+      badgeColor: "text-purple-500 bg-purple-500/10",
     },
     {
       id: "inspector" as NavigationTab,
@@ -192,6 +189,16 @@ export default function HomePage() {
       icon: Layers,
       badge: "7 Stages",
       badgeColor: "text-muted-foreground bg-surface-muted",
+    },
+    {
+      id: "overview" as NavigationTab,
+      label: "System Health & Roadmap",
+      icon: Activity,
+      badge: readiness?.status ? readiness.status.toUpperCase() : null,
+      badgeColor:
+        readiness?.status === "healthy"
+          ? "text-green-500 bg-green-500/10"
+          : "text-yellow-500 bg-yellow-500/10",
     },
   ];
 
@@ -336,11 +343,12 @@ export default function HomePage() {
             </button>
             <div>
               <h2 className="text-sm font-bold capitalize text-foreground">
-                {activeTab === "overview" && "System Health & Architecture"}
+                {activeTab === "lab" && "Live Architecture Lab (How Hybrid & GraphRAG Work)"}
                 {activeTab === "documents" && "Document Ingestion & Chunking (Phase 2)"}
                 {activeTab === "chat" && "AI Search & Evidence Grounded Chat"}
                 {activeTab === "graph" && "Knowledge Graph Explorer (Neo4j)"}
                 {activeTab === "inspector" && "Retrieval Pipeline Inspector"}
+                {activeTab === "overview" && "System Health & Roadmap"}
               </h2>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
                 NexusAI Multi-Tenant Knowledge Intelligence Platform
@@ -380,13 +388,15 @@ export default function HomePage() {
 
         {/* Dynamic Body Content */}
         <main className="flex-1 overflow-y-auto p-6 max-w-6xl w-full mx-auto">
+          {activeTab === "lab" && <ArchitectureLabView />}
+
           {activeTab === "overview" && (
             <OverviewView
               readiness={readiness}
               loading={loadingHealth}
               lastUpdated={lastUpdated}
               onRefresh={checkStatus}
-              onNavigateTab={setActiveTab}
+              onNavigateTab={(tab) => setActiveTab(tab as NavigationTab)}
               documentCount={documents.length}
               chunkCount={totalChunksCount}
               userEmail={user?.email || null}
